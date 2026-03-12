@@ -1,8 +1,8 @@
 <configuration>
 
     <appender name="CLOUDWATCH" class="ca.pjer.logback.AwsLogsAppender">
-        <logGroupName>producto-log-group</logGroupName>
-        <logStreamName>productos-service</logStreamName>
+        <logGroupName>productos-log-group</logGroupName>
+        <logStreamName>microservicio-productos</logStreamName>
 
         <logRegion>us-east-1</logRegion>
         <cloudWatchEndpoint>http://localstack:4566</cloudWatchEndpoint>
