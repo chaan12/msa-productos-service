@@ -65,7 +65,11 @@ class ProductControllerRetryPublishingTest {
         org.junit.jupiter.api.Assertions.assertEquals("Monitor 4K", data.get("nombre").asText());
         org.junit.jupiter.api.Assertions.assertEquals(499.99d, data.get("precio").asDouble());
         org.junit.jupiter.api.Assertions.assertEquals("PENDING", root.get("sendEmail").get("status").asText());
+        org.junit.jupiter.api.Assertions.assertEquals("Pendiente de ejecutar el paso de envio de correo",
+                root.get("sendEmail").get("message").asText());
         org.junit.jupiter.api.Assertions.assertEquals("PENDING", root.get("updateRetryJobs").get("status").asText());
+        org.junit.jupiter.api.Assertions.assertEquals("Pendiente de ejecutar el paso de actualizacion del retry job",
+                root.get("updateRetryJobs").get("message").asText());
     }
 
     @Test
