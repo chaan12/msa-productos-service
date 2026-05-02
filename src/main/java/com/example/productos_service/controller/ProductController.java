@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
@@ -26,6 +27,8 @@ import com.example.productos_service.service.ProductService;
 @RequestMapping("/productos")
 public class ProductController {
 
+    private static final String RETRY_REQUEST_HEADER = "X-Broker-Retry";
+    private static final String RETRY_REQUEST_VALUE = "true";
     private static final Logger logger = LoggerFactory.getLogger(ProductController.class);
     private final ProductService productService;
     private final ProductRetryPublisher productRetryPublisher;
@@ -46,17 +49,18 @@ public class ProductController {
     }
 
     @PostMapping
-    public ResponseEntity<Map<String, Object>> crearProducto(@RequestBody Product product){
+    public ResponseEntity<Map<String, Object>> crearProducto(@RequestBody Product product,
+            @RequestHeader(name = RETRY_REQUEST_HEADER, required = false) String retryRequestHeader){
         try {
             Product savedProduct = productService.crearProducto(product);
-            logger.info("Producto creado correctamente. id={}, nombre={}", savedProduct.getId(), savedProduct.getNombre());
+            logger.info("Producto creado correctamente. id={}, name={}", savedProduct.getId(), savedProduct.getName());
             return ResponseEntity.status(HttpStatus.CREATED)
                     .body(buildResponse(true, "Producto creado correctamente", savedProduct));
         } catch (ResponseStatusException exception) {
-            publishRetryOnServerError(product, exception);
+            publishRetryOnServerError(product, exception, retryRequestHeader);
             throw exception;
         } catch (Exception exception) {
-            publishRetryJob(product, exception);
+            publishRetryJob(product, exception, retryRequestHeader);
             throw exception;
         }
     }
@@ -80,15 +84,25 @@ public class ProductController {
         return response;
     }
 
-    private void publishRetryOnServerError(Product product, ResponseStatusException exception) {
+    private void publishRetryOnServerError(Product product, ResponseStatusException exception,
+            String retryRequestHeader) {
         if (exception.getStatusCode().is5xxServerError()) {
-            publishRetryJob(product, exception);
+            publishRetryJob(product, exception, retryRequestHeader);
         }
     }
 
-    private void publishRetryJob(Product product, Exception exception) {
-        logger.warn("Publishing product retry job after create failure. nombre={}, error={}",
-                product != null ? product.getNombre() : null, exception.getMessage());
+    private void publishRetryJob(Product product, Exception exception, String retryRequestHeader) {
+        if (isBrokerRetryRequest(retryRequestHeader)) {
+            logger.warn("Retry request from broker failed without republishing. name={}, error={}",
+                    product != null ? product.getName() : null, exception.getMessage());
+            return;
+        }
+        logger.warn("Publishing product retry job after create failure. name={}, error={}",
+                product != null ? product.getName() : null, exception.getMessage());
         productRetryPublisher.publish(product);
+    }
+
+    private boolean isBrokerRetryRequest(String retryRequestHeader) {
+        return RETRY_REQUEST_VALUE.equalsIgnoreCase(retryRequestHeader);
     }
 }

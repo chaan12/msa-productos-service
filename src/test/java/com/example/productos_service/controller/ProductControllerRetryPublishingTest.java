@@ -50,8 +50,16 @@ class ProductControllerRetryPublishingTest {
                         .contentType(APPLICATION_JSON)
                         .content("""
                                 {
-                                  "nombre": "Monitor 4K",
-                                  "precio": 499.99
+                                  "name": "Auriculares Bluetooth",
+                                  "description": "Auriculares inalambricos con cancelacion de ruido",
+                                  "price": 79.99,
+                                  "quantity": 120,
+                                  "image": "https://cdn.example.com/products/auriculares-bt.jpg",
+                                  "category": "Electronica",
+                                  "subcategory": "Audio",
+                                  "brand": "SoundMax",
+                                  "supplier": "Distribuidora Central SA",
+                                  "id": "39d41c02-4ede-48f0-9653-ba295681af9e"
                                 }
                                 """))
                 .andExpect(status().isInternalServerError());
@@ -62,14 +70,22 @@ class ProductControllerRetryPublishingTest {
         JsonNode root = objectMapper.readTree(payloadCaptor.getValue());
         JsonNode data = root.get("data");
 
-        org.junit.jupiter.api.Assertions.assertEquals("Monitor 4K", data.get("nombre").asText());
-        org.junit.jupiter.api.Assertions.assertEquals(499.99d, data.get("precio").asDouble());
-        org.junit.jupiter.api.Assertions.assertEquals("PENDING", root.get("sendEmail").get("status").asText());
-        org.junit.jupiter.api.Assertions.assertEquals("Pendiente de ejecutar el paso de envio de correo",
-                root.get("sendEmail").get("message").asText());
-        org.junit.jupiter.api.Assertions.assertEquals("PENDING", root.get("updateRetryJobs").get("status").asText());
-        org.junit.jupiter.api.Assertions.assertEquals("Pendiente de ejecutar el paso de actualizacion del retry job",
-                root.get("updateRetryJobs").get("message").asText());
+        org.junit.jupiter.api.Assertions.assertEquals(1, root.size());
+        org.junit.jupiter.api.Assertions.assertEquals("Auriculares Bluetooth", data.get("name").asText());
+        org.junit.jupiter.api.Assertions.assertEquals("Auriculares inalambricos con cancelacion de ruido",
+                data.get("description").asText());
+        org.junit.jupiter.api.Assertions.assertEquals(79.99d, data.get("price").asDouble());
+        org.junit.jupiter.api.Assertions.assertEquals(120, data.get("quantity").asInt());
+        org.junit.jupiter.api.Assertions.assertEquals("https://cdn.example.com/products/auriculares-bt.jpg",
+                data.get("image").asText());
+        org.junit.jupiter.api.Assertions.assertEquals("Electronica", data.get("category").asText());
+        org.junit.jupiter.api.Assertions.assertEquals("Audio", data.get("subcategory").asText());
+        org.junit.jupiter.api.Assertions.assertEquals("SoundMax", data.get("brand").asText());
+        org.junit.jupiter.api.Assertions.assertEquals("Distribuidora Central SA", data.get("supplier").asText());
+        org.junit.jupiter.api.Assertions.assertEquals("39d41c02-4ede-48f0-9653-ba295681af9e",
+                data.get("id").asText());
+        org.junit.jupiter.api.Assertions.assertFalse(root.has("sendEmail"));
+        org.junit.jupiter.api.Assertions.assertFalse(root.has("updateRetryJobs"));
     }
 
     @Test
@@ -81,11 +97,30 @@ class ProductControllerRetryPublishingTest {
                         .contentType(APPLICATION_JSON)
                         .content("""
                                 {
-                                  "nombre": "",
-                                  "precio": 499.99
+                                  "name": "",
+                                  "price": 499.99
                                 }
                                 """))
                 .andExpect(status().isBadRequest());
+
+        verify(kafkaTemplate, never()).send(eq("product_retry_jobs"), org.mockito.ArgumentMatchers.anyString());
+    }
+
+    @Test
+    void shouldNotRepublishRetryMessageWhenRequestComesFromBroker() throws Exception {
+        when(productService.crearProducto(org.mockito.ArgumentMatchers.any()))
+                .thenThrow(new IllegalStateException("Mongo no disponible"));
+
+        mockMvc.perform(post("/productos")
+                        .header("X-Broker-Retry", "true")
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name": "Monitor 24 pulgadas",
+                                  "price": 249.99
+                                }
+                                """))
+                .andExpect(status().isInternalServerError());
 
         verify(kafkaTemplate, never()).send(eq("product_retry_jobs"), org.mockito.ArgumentMatchers.anyString());
     }
